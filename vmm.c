@@ -54,10 +54,10 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
         exit(1);
     }
 
-    int victimIndex = 0, lru = 1500;
+    int victimIndex = 0, lru = 0;
     for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
     {
-        if (uptime[i] < lru)
+        if (uptime[i] > lru)
         {
             lru = uptime[i];
             victimIndex = i;
@@ -74,10 +74,6 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
 
     // Reset uptime
     uptime[victimIndex] = 0;
-
-    // Update uptime
-    for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
-        if (pageTable[i] != -1) uptime[i] += 1;  
     
     return frameIndex;
 }
@@ -112,6 +108,10 @@ int main(int argc, char* argv[])
         // Extract offset and page number from virtual addresses
         int offset = logicalAddress & 0xff;
         int pageNumber = (logicalAddress & 0xffff) >> 8; 
+
+        // Update uptime
+        for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
+            if (pageTable[i] != -1) uptime[i] += 1;  
 
         // Check TLB
         
