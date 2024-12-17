@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
             numberOfPageFault += 1;
             printf("Page Fault: %d\n", numberOfPageFault);
             int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset);
-            UpdateTLB(pageNumber, pageTable[pageNumber]);
+            updateTLB(pageNumber, pageTable[pageNumber]);
             data = physicalMemory[frameNumber][offset];
             physicalAddress = frameNumber * FRAME_SIZE + offset;
             printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
