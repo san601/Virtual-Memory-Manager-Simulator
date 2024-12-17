@@ -3,7 +3,7 @@
 
 #define SIZE_OF_TLB 16
 #define SIZE_OF_PAGE_TABLE 256
-#define NUMBER_OF_FRAME 128
+#define NUMBER_OF_FRAME 256
 #define FRAME_SIZE 256
 
 int addressCount = 0;
@@ -27,7 +27,6 @@ void initialize()
 
 int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
 {
-    numberOfPageFault += 1;
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
     {
         if (freeFrame[i]) 
@@ -55,10 +54,10 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
         exit(1);
     }
 
-    int victimIndex = 0, lru = 0;
+    int victimIndex = 0, lru = 1500;
     for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
     {
-        if (uptime[i] > lru)
+        if (uptime[i] < lru)
         {
             lru = uptime[i];
             victimIndex = i;
@@ -78,7 +77,7 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
 
     // Update uptime
     for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
-        if (pageTable[i] != -1) uptime[i] += 1;   
+        if (pageTable[i] != -1) uptime[i] += 1;  
     
     return frameIndex;
 }
@@ -112,8 +111,10 @@ int main(int argc, char* argv[])
         int data, physicalAddress;
         // Extract offset and page number from virtual addresses
         int offset = logicalAddress & 0xff;
-        int pageNumber = (logicalAddress & 0xffff) >> 8;
+        int pageNumber = (logicalAddress & 0xffff) >> 8; 
+
         // Check TLB
+        
 
         // If not found, check pageTable
         if (!hit)
@@ -129,16 +130,18 @@ int main(int argc, char* argv[])
         // If not found, handle page fault
         if (!hit) 
         {
+            numberOfPageFault += 1;
             int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset);
             data = physicalMemory[frameNumber][offset];
             physicalAddress = frameNumber * FRAME_SIZE + offset;
+            // printf("Huhu: %d Huhu: %d Huhu: %d\n", frameNumber, FRAME_SIZE, offset);
             printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
         }
         addressCount += 1;
     }
     printf("Number of Translated Addresses = %d\n", addressCount);
     printf("Page Faults = %d\n", numberOfPageFault);
-    printf("Page Fault Rate = %f\n", numberOfPageFault / addressCount);
+    printf("Page Fault Rate = %f\n", (float)numberOfPageFault / addressCount);
     printf("TLB Hits = \n");
     printf("TLB Hit Rate = \n");
     fclose(addressFile);
