@@ -11,9 +11,10 @@ int numberOfPageFault = 0;
 int hit;
 int TLB[SIZE_OF_TLB][2];
 int pageTable[SIZE_OF_PAGE_TABLE];
-int uptime[SIZE_OF_PAGE_TABLE];
 int freeFrame[NUMBER_OF_FRAME];
 int8_t physicalMemory[NUMBER_OF_FRAME][FRAME_SIZE];
+int freeIndex = 0;
+
 
 void initialize()
 {
@@ -21,15 +22,13 @@ void initialize()
         pageTable[i] = -1; // -1 represents as a invalid bit
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
         freeFrame[i] = 1;   
-    for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++) 
-        uptime[i] = 0;
 }
 
 int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
 {
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
     {
-        if (freeFrame[i]) 
+        if (freeFrame[i] == 1) 
         {
             // Add data
             if (fseek(backingStoreFile, pageNumber * 256, SEEK_SET) != 0)
@@ -43,27 +42,32 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
             freeFrame[i] = 0;
             pageTable[pageNumber] = i;
 
+            // printf("FreeFrame: %d\n", i);
             return i; // return frame number
         }
     }
 
-    // LRU
+    // FIFO
     if (fseek(backingStoreFile, pageNumber * 256, SEEK_SET) != 0)
     {
-        printf("Error while seeking backing store (LRU)");
+        printf("Error while seeking backing store (FIFO)");
         exit(1);
     }
 
-    int victimIndex = 0, lru = 0;
+    // Get the FIFO page in pageTable, use the frame it maps to store our new demand
+    int victimIndex = 0;
     for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
     {
-        if (uptime[i] > lru)
+        if (pageTable[i] == freeIndex)
         {
-            lru = uptime[i];
             victimIndex = i;
+            freeIndex++;
+            freeIndex %= NUMBER_OF_FRAME;
+            // printf("victimIndex: %d\n", victimIndex);
+            break;
         }
     }
-    // Get the LRU page in pageTable, use the frame it maps to store our new demand
+    // printf("victimIndex: %d\n", victimIndex);
     int frameIndex = pageTable[victimIndex];
     pageTable[victimIndex] = -1;
     pageTable[pageNumber] = frameIndex;
@@ -72,9 +76,6 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
     for (int j = 0; j < FRAME_SIZE; j++)
         fread(&physicalMemory[frameIndex][j], 1, 1, backingStoreFile);
 
-    // Reset uptime
-    uptime[victimIndex] = 0;
-    
     return frameIndex;
 }
 
@@ -109,10 +110,6 @@ int main(int argc, char* argv[])
         int offset = logicalAddress & 0xff;
         int pageNumber = (logicalAddress & 0xffff) >> 8; 
 
-        // Update uptime
-        for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
-            if (pageTable[i] != -1) uptime[i] += 1;  
-
         // Check TLB
         
 
@@ -131,6 +128,7 @@ int main(int argc, char* argv[])
         if (!hit) 
         {
             numberOfPageFault += 1;
+            printf("Page Fault: %d\n", numberOfPageFault);
             int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset);
             data = physicalMemory[frameNumber][offset];
             physicalAddress = frameNumber * FRAME_SIZE + offset;

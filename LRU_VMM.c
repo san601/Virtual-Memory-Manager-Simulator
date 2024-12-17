@@ -29,7 +29,7 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
 {
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
     {
-        if (freeFrame[i]) 
+        if (freeFrame[i] == 1) 
         {
             // Add data
             if (fseek(backingStoreFile, pageNumber * 256, SEEK_SET) != 0)
@@ -43,6 +43,7 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
             freeFrame[i] = 0;
             pageTable[pageNumber] = i;
 
+            // printf("FreeFrame: %d\n", i);
             return i; // return frame number
         }
     }
@@ -63,6 +64,7 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
             victimIndex = i;
         }
     }
+    // printf("victimIndex: %d\n", victimIndex);
     // Get the LRU page in pageTable, use the frame it maps to store our new demand
     int frameIndex = pageTable[victimIndex];
     pageTable[victimIndex] = -1;
@@ -111,7 +113,7 @@ int main(int argc, char* argv[])
 
         // Update uptime
         for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
-            if (pageTable[i] != -1) uptime[i] += 1;  
+            if (pageTable[i] != -1) uptime[i]++;  
 
         // Check TLB
         
@@ -124,6 +126,7 @@ int main(int argc, char* argv[])
                 data = physicalMemory[pageTable[pageNumber]][offset];
                 physicalAddress = pageTable[pageNumber] * FRAME_SIZE + offset;
                 printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
+                uptime[pageNumber] = 0;
                 hit = 1;
             }
         }
@@ -131,6 +134,7 @@ int main(int argc, char* argv[])
         if (!hit) 
         {
             numberOfPageFault += 1;
+            printf("Page Fault: %d\n", numberOfPageFault);
             int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset);
             data = physicalMemory[frameNumber][offset];
             physicalAddress = frameNumber * FRAME_SIZE + offset;
