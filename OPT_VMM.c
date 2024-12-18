@@ -5,35 +5,35 @@
 #define SIZE_OF_PAGE_TABLE 256
 #define NUMBER_OF_FRAME 128
 #define FRAME_SIZE 256
+#define NUM_ADDRESS 40000
 
 int addressCount = 0;
 int numberOfPageFault = 0;
-int hit;
-int TLBsum;
 int TLBhit;
+int TLBsum;
+int hit;
 int TLB[SIZE_OF_TLB][2];
 int pageTable[SIZE_OF_PAGE_TABLE];
-int uptime[SIZE_OF_PAGE_TABLE];
-int uptimeTLB[SIZE_OF_TLB];
 int freeFrame[NUMBER_OF_FRAME];
 int8_t physicalMemory[NUMBER_OF_FRAME][FRAME_SIZE];
+int uptimeTLB[SIZE_OF_TLB];
+int freeIndex = 0;
+int freeIndexTLB = 0;
+int arrLogicalAddress[NUM_ADDRESS], cntLogicalAddress;
 
 void initialize()
 {
     for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++) 
         pageTable[i] = -1; // -1 represents as a invalid bit
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
-        freeFrame[i] = 1;   
-    for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++) 
-        uptime[i] = 0;
-    for (int i = 0; i < SIZE_OF_TLB; i++) 
-    {
+        freeFrame[i] = 1;
+    for (int i = 0; i < SIZE_OF_TLB; i++) {
         uptimeTLB[i] = 9999;
         TLB[i][0] = -1;
     }
 }
 
-int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
+int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset, int start)
 {
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
     {
@@ -51,29 +51,42 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
             freeFrame[i] = 0;
             pageTable[pageNumber] = i;
 
-            // printf("FreeFrame: %d\n", i);
             return i; // return frame number
         }
     }
 
-    // LRU
+    // OPT
     if (fseek(backingStoreFile, pageNumber * 256, SEEK_SET) != 0)
     {
-        printf("Error while seeking backing store (LRU)");
+        printf("Error while seeking backing store (OPT)");
         exit(1);
     }
 
-    int victimIndex = 0, lru = 0;
+    // Get the OPT page in pageTable, use the frame it maps to store our new demand
+    int victimIndex = 0, opt = 0;
+    printf("Start: %d\n", start);
     for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
     {
-        if (uptime[i] > lru)
+        if (pageTable[i] != -1)
         {
-            lru = uptime[i];
-            victimIndex = i;
+            int found = 0;
+            for (int j = start + 1; j < cntLogicalAddress; j++) {
+                if (arrLogicalAddress[j] == i) {
+                    if (opt < j - start) {
+                        opt = j - start;
+                        victimIndex = i;
+                    }
+                    found = 1;
+                    break;
+                } 
+            }
+            if (!found) { 
+                victimIndex = i; 
+                break;
+            }
         }
     }
     // printf("victimIndex: %d\n", victimIndex);
-    // Get the LRU page in pageTable, use the frame it maps to store our new demand
     int frameIndex = pageTable[victimIndex];
     pageTable[victimIndex] = -1;
     pageTable[pageNumber] = frameIndex;
@@ -82,9 +95,6 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
     for (int j = 0; j < FRAME_SIZE; j++)
         fread(&physicalMemory[frameIndex][j], 1, 1, backingStoreFile);
 
-    // Reset uptime
-    uptime[victimIndex] = 0;
-    
     return frameIndex;
 }
 
@@ -94,7 +104,6 @@ int checkTLB(int pageNumber)
     for(int i = 0; i < SIZE_OF_TLB ; i++)
         if( TLB[i][0] == pageNumber ) {
             uptimeTLB[i] = 0;
-            uptime[pageNumber] = 0;
             return 1;
         }
     return 0;
@@ -141,20 +150,21 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    while (fscanf(addressFile, "%d", &logicalAddress) == 1)
-    {
+    cntLogicalAddress = 0;
+    while (fscanf(addressFile, "%d", &logicalAddress) == 1) {
+        arrLogicalAddress[cntLogicalAddress++] = logicalAddress;
+    }
+
+    for (int i = 0; i < cntLogicalAddress; i++) {
+        logicalAddress = arrLogicalAddress[i];
         hit = 0;
         int data, physicalAddress;
         // Extract offset and page number from virtual addresses
         int offset = logicalAddress & 0xff;
         int pageNumber = (logicalAddress & 0xffff) >> 8; 
 
-        // Update uptime
-        for (int i = 0; i < SIZE_OF_PAGE_TABLE; i++)
-            if (pageTable[i] != -1) uptime[i]++;
         for (int i = 0; i < SIZE_OF_TLB; i++)
             if (TLB[i][0] != -1) uptimeTLB[i]++;    
-
         // Check TLB
         hit = checkTLB(pageNumber);
 
@@ -163,11 +173,10 @@ int main(int argc, char* argv[])
         {
             if (pageTable[pageNumber] != -1)
             {
-                updateTLB(pageNumber, pageTable[pageNumber]);
+                updateTLB(pageNumber,pageTable[pageNumber]);
                 data = physicalMemory[pageTable[pageNumber]][offset];
                 physicalAddress = pageTable[pageNumber] * FRAME_SIZE + offset;
                 printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
-                uptime[pageNumber] = 0;
                 hit = 1;
             }
         }
@@ -176,19 +185,21 @@ int main(int argc, char* argv[])
         {
             numberOfPageFault += 1;
             printf("Page Fault: %d\n", numberOfPageFault);
-            int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset);
-            updateTLB(pageNumber, pageTable[pageNumber]);
+            int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset, i);
+            updateTLB(pageNumber,pageTable[pageNumber]);
             data = physicalMemory[frameNumber][offset];
             physicalAddress = frameNumber * FRAME_SIZE + offset;
+            // printf("Huhu: %d Huhu: %d Huhu: %d\n", frameNumber, FRAME_SIZE, offset);
             printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
         }
         addressCount += 1;
     }
+
     printf("Number of Translated Addresses = %d\n", addressCount);
     printf("Page Faults = %d\n", numberOfPageFault);
-    printf("Page Fault Rate = %.3f\n", (float)numberOfPageFault / addressCount);
-    printf("TLB Hits = %d\n", (TLBsum - TLBhit));
-    printf("TLB Hit Rate = %.3f\n", 1.0 * (TLBsum - TLBhit) / TLBsum);
+    printf("Page Fault Rate = %.3f\n", (float) numberOfPageFault / addressCount);
+    printf("TLB Hits = %d\n",( TLBsum - TLBhit ));
+    printf("TLB Hit Rate = %.3f\n",1.0*( TLBsum-TLBhit ) / TLBsum);
     fclose(addressFile);
     fclose(backingStoreFile);
 }
