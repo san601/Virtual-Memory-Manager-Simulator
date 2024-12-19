@@ -16,7 +16,6 @@ int TLB[SIZE_OF_TLB][2];
 int pageTable[SIZE_OF_PAGE_TABLE];
 int freeFrame[NUMBER_OF_FRAME];
 int8_t physicalMemory[NUMBER_OF_FRAME][FRAME_SIZE];
-int uptimeTLB[SIZE_OF_TLB];
 int freeIndex = 0;
 int freeIndexTLB = 0;
 int arrLogicalAddress[NUM_ADDRESS], cntLogicalAddress;
@@ -28,7 +27,6 @@ void initialize()
     for (int i = 0; i < NUMBER_OF_FRAME; i++)
         freeFrame[i] = 1;
     for (int i = 0; i < SIZE_OF_TLB; i++) {
-        uptimeTLB[i] = 9999;
         TLB[i][0] = -1;
     }
 }
@@ -98,33 +96,24 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset, int star
     return frameIndex;
 }
 
-int checkTLB(int pageNumber)
+int checkTLB(int pageNumber, int offset, int logicalAddress, int data)
 {
     TLBsum++;
     for(int i = 0; i < SIZE_OF_TLB ; i++)
         if( TLB[i][0] == pageNumber ) {
-            uptimeTLB[i] = 0;
+            int physicalAddress = TLB[i][1] * FRAME_SIZE + offset;
+            printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
             return 1;
         }
     return 0;
 }
 
-
 void updateTLB(int pageNumber,int frameNumber)
 {
     TLBhit++;
-    int victimIndex = 0, lru = 0;
-    for (int i = 0; i < SIZE_OF_TLB; i++)
-    {
-        if (uptimeTLB[i] > lru)
-        {
-            lru = uptimeTLB[i];
-            victimIndex = i;
-        }
-    }
-    TLB[victimIndex][0] = pageNumber;
-    TLB[victimIndex][1] = frameNumber;
-    uptimeTLB[victimIndex] = 0;
+    TLB[freeIndexTLB][0] = pageNumber;
+    TLB[freeIndexTLB][1] = frameNumber;
+    freeIndexTLB = (freeIndexTLB + 1) % SIZE_OF_TLB;
 }
 
 int main(int argc, char* argv[])
@@ -163,10 +152,8 @@ int main(int argc, char* argv[])
         int offset = logicalAddress & 0xff;
         int pageNumber = (logicalAddress & 0xffff) >> 8; 
 
-        for (int i = 0; i < SIZE_OF_TLB; i++)
-            if (TLB[i][0] != -1) uptimeTLB[i]++;    
         // Check TLB
-        hit = checkTLB(pageNumber);
+        hit = checkTLB(pageNumber, offset, logicalAddress, data);
 
         // If not found, check pageTable
         if (!hit)

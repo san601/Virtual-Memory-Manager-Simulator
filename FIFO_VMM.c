@@ -82,12 +82,15 @@ int handlePageFault(FILE* backingStoreFile, int pageNumber, int offset)
     return frameIndex;
 }
 
-int checkTLB(int pageNumber)
+int checkTLB(int pageNumber, int offset, int logicalAddress, int data)
 {
     TLBsum++;
     for(int i = 0; i < SIZE_OF_TLB ; i++)
-        if( TLB[i][0] == pageNumber )
+        if( TLB[i][0] == pageNumber ) {
+            int physicalAddress = TLB[i][1] * FRAME_SIZE + offset;
+            printf("Virtual address: %d Physical address: %d Value: %d\n", logicalAddress, physicalAddress, data);
             return 1;
+        }
     return 0;
 }
 
@@ -131,7 +134,7 @@ int main(int argc, char* argv[])
         int pageNumber = (logicalAddress & 0xffff) >> 8; 
 
         // Check TLB
-        hit = checkTLB(pageNumber);
+        hit = checkTLB(pageNumber, offset, logicalAddress, data);
 
         // If not found, check pageTable
         if (!hit)
