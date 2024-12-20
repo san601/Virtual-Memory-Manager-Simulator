@@ -48,6 +48,6 @@ physical_pages = 128  # Number of physical pages
 addresses = generate_addresses(num_addresses, page_count, working_set_size, physical_pages)
 
 # Write to file
-with open("generated_addresses_lru_benefit.txt", "w") as f:
+with open("test_addresses.txt", "w") as f:
     for addr in addresses:
         f.write(f"{addr}\n")

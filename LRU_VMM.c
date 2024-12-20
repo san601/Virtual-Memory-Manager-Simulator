@@ -3,7 +3,7 @@
 
 #define SIZE_OF_TLB 16
 #define SIZE_OF_PAGE_TABLE 256
-#define NUMBER_OF_FRAME 128
+#define NUMBER_OF_FRAME 256
 #define FRAME_SIZE 256
 
 int addressCount = 0;
@@ -177,7 +177,7 @@ int main(int argc, char* argv[])
         if (!hit) 
         {
             numberOfPageFault += 1;
-            printf("Page Fault: %d\n", numberOfPageFault);
+            // printf("Page Fault: %d\n", numberOfPageFault);
             int frameNumber = handlePageFault(backingStoreFile, pageNumber, offset);
             updateTLB(pageNumber, pageTable[pageNumber]);
             data = physicalMemory[frameNumber][offset];
